@@ -80,6 +80,11 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+/model/*.h5
+/model/*.pt
+/model/*.pth
+*.pth
+*.pt
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
