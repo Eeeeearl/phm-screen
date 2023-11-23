@@ -80,9 +80,9 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-/model/*.h5
-/model/*.pt
-/model/*.pth
+model/*.h5
+model/*.pt
+model/*.pth
 *.pth
 *.pt
 
