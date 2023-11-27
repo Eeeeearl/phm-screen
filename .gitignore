@@ -83,8 +83,11 @@ MANIFEST
 model/*.h5
 model/*.pt
 model/*.pth
+model/*.pkl
 *.pth
 *.pt
+*.h5
+*.pkl
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

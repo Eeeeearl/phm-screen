@@ -39,11 +39,14 @@ def clear_data(data, kwargs={}):
     long = data[data.loc[:, 'x_time'].map(lambda x: len(x)) >= len_thr]
     # run (std>825)
     std = long['x_time'].apply(lambda x: np.std(x))
-    run = long[long.index.isin(std[std > std_thr].index)]
+    run = long[long.index.isin(std[std > std_thr].index)]  # not detect the stop of status
+    # stop = long[long.index.isin(std[std <= std_thr].index)]  # detect the stop of status
     # sort
     run = run.sort_values('time')
+    # stop = stop.sort_values('time')
     # array
     run = format_data(run)
+    # stop = format_data(stop)
     return run
 
 
@@ -167,13 +170,37 @@ def concat_data(data, col=None):
     return concat
 
 
+# 对一条数据进行时域数据异常检测
+def one_time(data: np.ndarray, kwargs, model_IF, result):
+    """检测四个振动筛xyz三轴时域数据"""
+    outlier = kwargs.get('outRatio', 0.2)
+    minData = kwargs.get('minData', 800)
+    num = outlier * minData
+    frame = pd.DataFrame({})
+    for i in range(len(data)):
+        frame[i] = data[i]
+    pre_frame = model_IF.predict(frame)  # i_anomaly: [1,1,-1,-1,...]
+    isNoOut = True
+    for i in range(len(data)):
+        field = '{}_anomaly'.format(str(i))
+        if num <= pre_frame[field].apply(lambda x: sum(x == -1)).sum():
+            isNoOut = False
+    result['isAbnormal'] = 0 if isNoOut else 1  # 0 False 无异常, 1 True
+    return result
+
+
 def one_cell(data: np.ndarray, kwargs={}):
     """检测一个数据"""
     step = kwargs.get('step', 1000 // 15)  # 步长：1个周期长度（1000：数据量，15：周期数）
     lens = kwargs.get('lens', 1024)  # 传感器采样频率（1s采样数据量）
     diff = kwargs.get('diff', 1/2)  # 若传值<1则计算振幅比例值，若传值>1则使用该值
+    # 数据平滑处理 -> 方便得到真实振幅
+    smooth_data = np.convolve(data, np.ones((10,))/10, mode='valid')
+    minimum_2 = np.min(smooth_data)
+    maximum_2 = np.max(smooth_data)
+    avgamp_2 = maximum_2 - minimum_2
     # 周期分段
-    x = np.arange(0, lens, step)
+    x = np.arange(0, lens, step)  # start, stop, step
     # 分段最值及其索引
     intervals = [data[x[i]:x[i+1]] for i in range(len(x)-1)]
     min_idxs = np.zeros(len(intervals))
@@ -197,7 +224,8 @@ def one_cell(data: np.ndarray, kwargs={}):
     # 最值均值、最值均值振幅
     avgmin = np.mean([val for val in min_vals if (val > min(min_vals)) and (val < max(min_vals))])
     avgmax = np.mean([val for val in max_vals if (val > min(max_vals)) and (val < max(max_vals))])
-    avgamp = avgmax - avgmin
+    avgamp_1 = avgmax - avgmin
+    avgamp = avgamp_1 if avgamp_1 >= avgamp_2 else avgamp_2
     # 振动异常
     diff_thr = avgamp * diff if diff < 1 else diff
     mindiff = abs(min_vals - avgmin)
@@ -207,6 +235,7 @@ def one_cell(data: np.ndarray, kwargs={}):
     minover_count = len(minover)
     maxover_count = len(maxover)
     allover_count = minover_count + maxover_count
+
     # 返回结果
     result = {'max': maximum,
               'min': minimum,
@@ -221,7 +250,7 @@ def one_cell(data: np.ndarray, kwargs={}):
     return result
 
 
-def one_row(row: pd.Series, kwargs={}):
+def one_row(row: pd.Series, model_IF, kwargs={}):
     """检测一行数据"""
     amplitude = kwargs.get('amplitude', 6000)  # 正常振幅
     gzRatio = kwargs.get('gzRatio', 2)  # 共振倍数（正常振幅的倍数）
@@ -240,6 +269,11 @@ def one_row(row: pd.Series, kwargs={}):
         else:
             result['maoci'] = False
 
+    # 利用模型进行判断，数据有误异常（工作状态）
+    result = one_time(xyz_time, kwargs, model_IF, result)
+
+    # 0 存在异常
+    # if result['isAbnormal'] == 0:  # 0 False, 1 True
     # 共振（振幅过大）
     gz_thr = amplitude * gzRatio
     if result['x_time_l1']['avgAmp'] > gz_thr and result['x_time_r1']['avgAmp'] > gz_thr:
@@ -263,6 +297,10 @@ def one_row(row: pd.Series, kwargs={}):
         result['niuzhen'] = True
     else:
         result['niuzhen'] = False
+    # else:
+    #     result['gongzhen'] = False
+    #     result['pianzhen'] = False
+    #     result['niuzhen'] = False
 
     result['time_l1'] = row['time_l1']
     result['time_l2'] = row['time_l2']
@@ -276,25 +314,25 @@ def one_row(row: pd.Series, kwargs={}):
     return result
 
 
-def short_detect(device, kwargs={}):
-    """短期检测"""
-    last_row = device.iloc[-1]
-    result = one_row(last_row, kwargs)  # series
-    # result = dict(result)
-    # print(result)
-    # 振幅
-    # xamp_thr = (7000, 3000)  # 前后(max,min)
-    # yamp_thr = (7000, 3000)  # 上下(max,min)
-    # zamp_thr = (4000,)       # 左右(max)
-    return result
+# def short_detect(device, kwargs={}):
+#     """短期检测"""
+#     last_row = device.iloc[-1]
+#     result = one_row(last_row, kwargs)  # series
+#     # result = dict(result)
+#     # print(result)
+#     # 振幅
+#     # xamp_thr = (7000, 3000)  # 前后(max,min)
+#     # yamp_thr = (7000, 3000)  # 上下(max,min)
+#     # zamp_thr = (4000,)       # 左右(max)
+#     return result
 
 
-def middle_detect(device, kwargs={}):
+def middle_detect(device, model_IF, kwargs={}):
     """中期检测"""
     df = pd.DataFrame([])
     for i in range(len(device)):
         row = device.iloc[i]
-        result = one_row(row, kwargs)
+        result = one_row(row, model_IF, kwargs)
         result = pd.DataFrame(dict(result.map(lambda x: [x])))
         df = pd.concat([df, result], axis=0)
 
@@ -326,7 +364,7 @@ def long_detect(device):
     pass
 
 
-def detect(cache_dict, result_dict, kwargs={}):
+def detect(cache_dict, result_dict, model_IF, kwargs={}):
     """检测异常"""
     for name in cache_dict.keys():
         device = cache_dict[name]
@@ -335,12 +373,12 @@ def detect(cache_dict, result_dict, kwargs={}):
         result = result_dict.get(name, pd.DataFrame({}))
         if len(result) > 0:
             last_time = result['time_l1'].iloc[-1]
-            device = device[device['time_l1'] > last_time]
+            device = device[device['time_l1'] > last_time]  # avoid re-detect
 
         # 短期
         # result_short = short_detect(device, kwargs)  # 1 second
         # 中期
-        result_middle = middle_detect(device, kwargs)  # 1 hour
+        result_middle = middle_detect(device, model_IF, kwargs)  # 1 hour
         # 长期
         # result_long = long_detect(device)  # 1 day
 

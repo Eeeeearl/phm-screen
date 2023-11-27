@@ -1,6 +1,8 @@
 import numpy as np
+import pandas as pd
 from keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
+import pickle
 
 class BiLSTM(object):
     def __init__(self, weight='./model/BiLSTM.h5', pattern=''):
@@ -35,3 +37,13 @@ class BiLSTM(object):
             else:
                 return [[]]
 
+
+class IForest(object):
+    def __init__(self, weight='./model/IForest.pkl'):
+        with open(weight, 'rb') as file:
+            self.model = pickle.load(file)
+
+    def predict(self, input:pd.DataFrame()):
+        for col in input.columns:
+            field = '{}_anomaly'.format(str(col))
+            input[field] = self.model.predict(input[[col]])

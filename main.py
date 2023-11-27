@@ -27,6 +27,7 @@ class Detector(object):
         # ADD: BiLSTM模型加载
         self.model_olj = model.BiLSTM('./model/BiLSTM_pry_pre5.h5', pattern='olj')
         self.model_temp = model.BiLSTM('./model/BiLSTM_temp_pre5.h5', pattern='temp')
+        self.model_IF = model.IForest('.//model/IForest.pkl')
 
     def __del__(self):
         # self.engine.close()
@@ -46,7 +47,7 @@ class Detector(object):
         while True:
             # 箱体检测
             t0 = time.time()
-            box_result = detect_box(self.box_kwargs)
+            box_result = detect_box(self.box_kwargs, self.model_IF)
             print(f'--> 箱体检测完毕！{time.time()-t0:.3f}s')
             # print(dict(box_result['筛机3108'])['name'].iloc[-1])
             # print(box_result['筛机3108'].columns)

@@ -9,7 +9,7 @@ cache_dict = {}
 result_dict = {}
 
 
-def main(kwargs):
+def main(kwargs, model_IF):
     """主函数"""
     global cache_dict, result_dict
 
@@ -50,7 +50,7 @@ def main(kwargs):
     cache_dict = cash_data(device_dict, cache_dict, kwargs)
 
     # 检测
-    result_dict = detect(cache_dict, result_dict, kwargs)  # results dict
+    result_dict = detect(cache_dict, result_dict, model_IF, kwargs)  # results dict
 
     return result_dict
 
